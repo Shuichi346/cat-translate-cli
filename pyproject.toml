@@ -16,3 +16,14 @@ dependencies = [
 
 [project.scripts]
 cat-translate = "cat_translate_cli.cli:main"
+
+[dependency-groups]
+dev = [
+    "deptry>=0.25.1",
+    "mypy>=1.19.1",
+    "ruff>=0.15.7",
+    "vulture>=2.15",
+]
+
+[tool.deptry]
+known_first_party = ["cat_translate_cli"]

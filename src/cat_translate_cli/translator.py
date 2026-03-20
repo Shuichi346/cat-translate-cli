@@ -1,26 +1,22 @@
 """翻訳エンジン: GGUF モデルの読み込みと翻訳処理"""
 
+from __future__ import annotations
+
 import ctypes
 import sys
+from typing import Any
 
+import llama_cpp
 from huggingface_hub import hf_hub_download
 from llama_cpp import Llama
-import llama_cpp
 
 
-# Hugging Face リポジトリ ID（量子化 GGUF）
 DEFAULT_REPO_ID = "mradermacher/CAT-Translate-7b-i1-GGUF"
-
-# デフォルトモデルファイル名
 DEFAULT_MODEL_FILENAME = "CAT-Translate-7b.i1-Q4_K_M.gguf"
-
-# Apple Silicon (Metal) で全レイヤーを GPU に載せる
 DEFAULT_N_GPU_LAYERS = -1
-
-# コンテキストウィンドウサイズ
 DEFAULT_N_CTX = 4096
+DEFAULT_MAX_TOKENS = 2048
 
-# 言語の短縮形 → 正式名の対応表
 LANGUAGE_ALIASES = {
     "ja": "Japanese",
     "jp": "Japanese",
@@ -30,34 +26,33 @@ LANGUAGE_ALIASES = {
     "english": "English",
 }
 
-# 入力で受け付ける言語名の一覧（ヘルプ表示用）
 VALID_LANGUAGE_INPUTS = ["ja", "en", "Japanese", "English"]
+
+_LLAMA_LOG_CALLBACK: Any | None = None
 
 
 def suppress_llama_log() -> None:
     """llama.cpp の C レベルのログ出力を無効化する"""
-    # llama.cpp の内部ログコールバックを空関数に差し替える
-    # これにより ggml_metal_init 等のメッセージが抑制される
+    global _LLAMA_LOG_CALLBACK
+
     log_callback_type = ctypes.CFUNCTYPE(
         None,
-        ctypes.c_int,       # level
-        ctypes.c_char_p,    # text
-        ctypes.c_void_p,    # user_data
+        ctypes.c_int,
+        ctypes.c_char_p,
+        ctypes.c_void_p,
     )
 
-    def _null_log(level, text, user_data):
-        pass
+    def _null_log(_level: int, _text: bytes | None, _user_data: Any) -> None:
+        return None
 
-    # コールバックを保持（GC で回収されないようにする）
-    suppress_llama_log._callback = log_callback_type(_null_log)
+    _LLAMA_LOG_CALLBACK = log_callback_type(_null_log)
 
     try:
         llama_cpp.llama_cpp.llama_log_set(
-            suppress_llama_log._callback,
+            _LLAMA_LOG_CALLBACK,
             ctypes.c_void_p(0),
         )
     except AttributeError:
-        # llama_log_set が存在しないバージョンの場合は無視
         pass
 
 
@@ -66,11 +61,9 @@ def normalize_language(value: str) -> str:
     normalized = LANGUAGE_ALIASES.get(value.lower())
     if normalized is None:
         valid = ", ".join(VALID_LANGUAGE_INPUTS)
-        print(
-            f"エラー: 不明な言語 '{value}'（指定可能: {valid}）",
-            file=sys.stderr,
+        raise ValueError(
+            f"不明な言語 '{value}' です（指定可能: {valid}）"
         )
-        sys.exit(1)
     return normalized
 
 
@@ -83,13 +76,19 @@ def download_model(
     if verbose:
         print(f"モデルを準備中: {repo_id}/{filename}", file=sys.stderr)
 
-    local_path = hf_hub_download(
-        repo_id=repo_id,
-        filename=filename,
-    )
+    try:
+        local_path = hf_hub_download(
+            repo_id=repo_id,
+            filename=filename,
+        )
+    except Exception as error:
+        raise RuntimeError(
+            f"モデルの準備に失敗しました: {repo_id}/{filename}: {error}"
+        ) from error
 
     if verbose:
         print(f"モデル準備完了: {local_path}", file=sys.stderr)
+
     return local_path
 
 
@@ -106,15 +105,21 @@ def load_model(
     if verbose:
         print("モデルを読み込み中...", file=sys.stderr)
 
-    llm = Llama(
-        model_path=model_path,
-        n_gpu_layers=n_gpu_layers,
-        n_ctx=n_ctx,
-        verbose=verbose,
-    )
+    try:
+        llm = Llama(
+            model_path=model_path,
+            n_gpu_layers=n_gpu_layers,
+            n_ctx=n_ctx,
+            verbose=verbose,
+        )
+    except Exception as error:
+        raise RuntimeError(
+            f"モデル読み込みに失敗しました: {model_path}: {error}"
+        ) from error
 
     if verbose:
         print("モデル読み込み完了", file=sys.stderr)
+
     return llm
 
 
@@ -126,15 +131,17 @@ def detect_language(text: str) -> str:
     for char in text:
         if char.isspace() or char in ".,!?;:\"'()-":
             continue
+
         total_count += 1
-        cp = ord(char)
+        code_point = ord(char)
+
         if (
-            (0x3040 <= cp <= 0x309F)
-            or (0x30A0 <= cp <= 0x30FF)
-            or (0x4E00 <= cp <= 0x9FFF)
-            or (0x3400 <= cp <= 0x4DBF)
-            or (0xFF00 <= cp <= 0xFFEF)
-            or (0x3000 <= cp <= 0x303F)
+            0x3040 <= code_point <= 0x309F
+            or 0x30A0 <= code_point <= 0x30FF
+            or 0x4E00 <= code_point <= 0x9FFF
+            or 0x3400 <= code_point <= 0x4DBF
+            or 0xFF00 <= code_point <= 0xFFEF
+            or 0x3000 <= code_point <= 0x303F
         ):
             japanese_count += 1
 
@@ -143,7 +150,36 @@ def detect_language(text: str) -> str:
 
     if japanese_count / total_count >= 0.3:
         return "Japanese"
+
     return "English"
+
+
+def extract_translation_content(response: Any) -> str:
+    """chat completion の応答から翻訳結果を安全に取り出す"""
+    if not isinstance(response, dict):
+        raise RuntimeError("モデル応答の形式が不正です。")
+
+    choices = response.get("choices")
+    if not isinstance(choices, list) or not choices:
+        raise RuntimeError("モデルから応答を取得できませんでした。")
+
+    first_choice = choices[0]
+    if not isinstance(first_choice, dict):
+        raise RuntimeError("モデル応答の形式が不正です。")
+
+    message = first_choice.get("message")
+    if not isinstance(message, dict):
+        raise RuntimeError("モデル応答の形式が不正です。")
+
+    content = message.get("content")
+    if not isinstance(content, str):
+        raise RuntimeError("モデル応答に翻訳結果が含まれていません。")
+
+    result = content.strip()
+    if not result:
+        raise RuntimeError("翻訳結果が空です。")
+
+    return result
 
 
 def translate(
@@ -151,28 +187,35 @@ def translate(
     text: str,
     src_lang: str | None = None,
     tgt_lang: str | None = None,
-    max_tokens: int = 2048,
+    max_tokens: int = DEFAULT_MAX_TOKENS,
 ) -> str:
     """テキストを翻訳する"""
     if src_lang is None:
         src_lang = detect_language(text)
+
     if tgt_lang is None:
         tgt_lang = "English" if src_lang == "Japanese" else "Japanese"
 
     prompt = (
-        f"Translate the following {src_lang} text "
-        f"into {tgt_lang}.\n\n{text}"
+        f"Translate the following {src_lang} text into {tgt_lang}. "
+        "Return only the translated text.\n\n"
+        f"{text}"
     )
 
-    messages = [
-        {"role": "user", "content": prompt},
+    messages: Any = [
+        {
+            "role": "user",
+            "content": prompt,
+        }
     ]
 
-    response = llm.create_chat_completion(
-        messages=messages,
-        max_tokens=max_tokens,
-        temperature=0.1,
-    )
+    try:
+        response = llm.create_chat_completion(
+            messages=messages,
+            max_tokens=max_tokens,
+            temperature=0.1,
+        )
+    except Exception as error:
+        raise RuntimeError(f"翻訳に失敗しました: {error}") from error
 
-    result = response["choices"][0]["message"]["content"]
-    return result.strip()
+    return extract_translation_content(response)
