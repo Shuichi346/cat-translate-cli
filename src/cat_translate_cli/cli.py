@@ -10,6 +10,7 @@ from cat_translate_cli.translator import (
     DEFAULT_REPO_ID,
     download_model,
     load_model,
+    normalize_language,
     translate,
 )
 
@@ -23,13 +24,13 @@ def build_parser() -> argparse.ArgumentParser:
         epilog=(
             "使用例:\n"
             "  cat-translate \"これは猫です。\"\n"
-            "  cat-translate \"Hello, world!\" --to Japanese\n"
-            "  cat-translate --file input.txt\n"
+            "  cat-translate \"Hello, world!\" --to ja\n"
+            "  cat-translate --file input.txt --from en --to ja\n"
             '  echo "こんにちは" | cat-translate\n'
+            "  cat-translate \"猫\" --verbose  # 詳細ログ表示\n"
         ),
     )
 
-    # 翻訳対象テキスト（位置引数、省略可）
     parser.add_argument(
         "text",
         nargs="?",
@@ -37,7 +38,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="翻訳するテキスト（省略時は --file または標準入力から読み取り）",
     )
 
-    # ファイル入力
     parser.add_argument(
         "-f", "--file",
         type=str,
@@ -45,25 +45,23 @@ def build_parser() -> argparse.ArgumentParser:
         help="翻訳するテキストファイルのパス",
     )
 
-    # 翻訳方向
     parser.add_argument(
         "--from",
         dest="src_lang",
         type=str,
         default=None,
-        choices=["Japanese", "English"],
-        help="原文の言語（省略時は自動判定）",
+        metavar="LANG",
+        help="原文の言語（ja / en / Japanese / English、省略時は自動判定）",
     )
     parser.add_argument(
         "--to",
         dest="tgt_lang",
         type=str,
         default=None,
-        choices=["Japanese", "English"],
-        help="翻訳先の言語（省略時は自動判定）",
+        metavar="LANG",
+        help="翻訳先の言語（ja / en / Japanese / English、省略時は自動判定）",
     )
 
-    # モデル設定
     parser.add_argument(
         "--repo-id",
         type=str,
@@ -83,7 +81,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="ローカルの GGUF モデルファイルパス（指定時はダウンロードをスキップ）",
     )
 
-    # 推論設定
     parser.add_argument(
         "--n-gpu-layers",
         type=int,
@@ -105,7 +102,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--verbose",
         action="store_true",
-        help="llama.cpp の詳細ログを表示する",
+        help="モデル読み込みや llama.cpp の詳細ログを表示する",
     )
 
     return parser
@@ -113,11 +110,9 @@ def build_parser() -> argparse.ArgumentParser:
 
 def get_input_text(args: argparse.Namespace) -> str:
     """引数・ファイル・標準入力からテキストを取得する"""
-    # 位置引数が指定されている場合
     if args.text is not None:
         return args.text
 
-    # ファイルが指定されている場合
     if args.file is not None:
         try:
             with open(args.file, "r", encoding="utf-8") as f:
@@ -129,11 +124,9 @@ def get_input_text(args: argparse.Namespace) -> str:
             print(f"エラー: ファイル読み込みに失敗: {e}", file=sys.stderr)
             sys.exit(1)
 
-    # 標準入力から読み取り（パイプ入力の場合）
     if not sys.stdin.isatty():
         return sys.stdin.read().strip()
 
-    # どれも指定がない場合
     print("エラー: 翻訳するテキストを指定してください。", file=sys.stderr)
     print("使い方: cat-translate \"テキスト\" または cat-translate --file ファイル.txt", file=sys.stderr)
     sys.exit(1)
@@ -144,20 +137,22 @@ def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
 
-    # 翻訳対象テキストの取得
+    src_lang = normalize_language(args.src_lang) if args.src_lang else None
+    tgt_lang = normalize_language(args.tgt_lang) if args.tgt_lang else None
+
     text = get_input_text(args)
 
     if not text:
         print("エラー: 空のテキストです。", file=sys.stderr)
         sys.exit(1)
 
-    # モデルの準備
     if args.model_path is not None:
         model_path = args.model_path
     else:
-        model_path = download_model(args.repo_id, args.model)
+        model_path = download_model(
+            args.repo_id, args.model, verbose=args.verbose,
+        )
 
-    # モデルの読み込み
     llm = load_model(
         model_path=model_path,
         n_gpu_layers=args.n_gpu_layers,
@@ -165,14 +160,12 @@ def main() -> None:
         verbose=args.verbose,
     )
 
-    # 翻訳の実行
     result = translate(
         llm=llm,
         text=text,
-        src_lang=args.src_lang,
-        tgt_lang=args.tgt_lang,
+        src_lang=src_lang,
+        tgt_lang=tgt_lang,
         max_tokens=args.max_tokens,
     )
 
-    # 結果を標準出力に出力
     print(result)
