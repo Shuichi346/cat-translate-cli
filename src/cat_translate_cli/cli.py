@@ -5,6 +5,11 @@ from __future__ import annotations
 import argparse
 import sys
 
+from cat_translate_cli.client import (
+    DEFAULT_SERVER_URL,
+    is_server_running,
+    translate_via_server,
+)
 from cat_translate_cli.translator import (
     DEFAULT_MAX_TOKENS,
     DEFAULT_MODEL_FILENAME,
@@ -26,11 +31,16 @@ def build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "使用例:\n"
-            "  cat-translate 'これは猫です。'\n"
-            "  cat-translate 'Hello, world!' --to ja\n"
+            "  cat-translate \"これは猫です。\"\n"
+            "  cat-translate \"Hello, world!\" --to ja\n"
             "  cat-translate --file input.txt --from en --to ja\n"
-            "  echo 'こんにちは' | cat-translate\n"
-            "  cat-translate '猫' --verbose\n"
+            "  echo \"こんにちは\" | cat-translate\n"
+            "  cat-translate \"猫\" --verbose\n"
+            "\n"
+            "サーバーモード:\n"
+            "  サーバーが起動中なら自動的にサーバー経由で翻訳します（高速）\n"
+            "  サーバー起動: cat-translate-server\n"
+            "  サーバーを使わない: cat-translate \"テキスト\" --no-server\n"
         ),
     )
 
@@ -112,6 +122,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="モデル読み込みや llama.cpp の詳細ログを表示する",
     )
 
+    parser.add_argument(
+        "--server-url",
+        type=str,
+        default=DEFAULT_SERVER_URL,
+        help=f"翻訳サーバーの URL（デフォルト: {DEFAULT_SERVER_URL}）",
+    )
+    parser.add_argument(
+        "--no-server",
+        action="store_true",
+        help="サーバーを使わず、常にローカルでモデルを読み込んで翻訳する",
+    )
+
     return parser
 
 
@@ -138,8 +160,51 @@ def get_input_text(args: argparse.Namespace) -> str:
 
     raise ValueError(
         "翻訳するテキストを指定してください。"
-        " 使い方: cat-translate 'テキスト' または "
+        " 使い方: cat-translate \"テキスト\" または "
         "cat-translate --file ファイル.txt"
+    )
+
+
+def translate_local(args: argparse.Namespace, text: str) -> str:
+    """ローカルでモデルを読み込んで翻訳する（従来の動作）"""
+    src_lang = normalize_language(args.src_lang) if args.src_lang else None
+    tgt_lang = normalize_language(args.tgt_lang) if args.tgt_lang else None
+
+    if args.model_path is not None:
+        model_path = args.model_path
+    else:
+        model_path = download_model(
+            args.repo_id,
+            args.model,
+            verbose=args.verbose,
+        )
+
+    llm = load_model(
+        model_path=model_path,
+        n_gpu_layers=args.n_gpu_layers,
+        n_ctx=args.n_ctx,
+        verbose=args.verbose,
+    )
+
+    return translate(
+        llm=llm,
+        text=text,
+        src_lang=src_lang,
+        tgt_lang=tgt_lang,
+        max_tokens=args.max_tokens,
+    )
+
+
+def translate_remote(args: argparse.Namespace, text: str) -> str:
+    """サーバー経由で翻訳する"""
+    src_lang = normalize_language(args.src_lang) if args.src_lang else None
+    tgt_lang = normalize_language(args.tgt_lang) if args.tgt_lang else None
+
+    return translate_via_server(
+        text=text,
+        src_lang=src_lang,
+        tgt_lang=tgt_lang,
+        server_url=args.server_url,
     )
 
 
@@ -149,36 +214,31 @@ def main() -> None:
     args = parser.parse_args()
 
     try:
-        src_lang = normalize_language(args.src_lang) if args.src_lang else None
-        tgt_lang = normalize_language(args.tgt_lang) if args.tgt_lang else None
-
         text = get_input_text(args)
         if not text:
             raise ValueError("空のテキストです。")
 
-        if args.model_path is not None:
-            model_path = args.model_path
+        # サーバーが起動中ならサーバー経由で翻訳（高速）
+        use_server = (
+            not args.no_server
+            and is_server_running(args.server_url)
+        )
+
+        if use_server:
+            if args.verbose:
+                print(
+                    f"サーバー経由で翻訳します ({args.server_url})",
+                    file=sys.stderr,
+                )
+            result = translate_remote(args, text)
         else:
-            model_path = download_model(
-                args.repo_id,
-                args.model,
-                verbose=args.verbose,
-            )
+            if args.verbose and not args.no_server:
+                print(
+                    "サーバーが見つかりません。ローカルで翻訳します。",
+                    file=sys.stderr,
+                )
+            result = translate_local(args, text)
 
-        llm = load_model(
-            model_path=model_path,
-            n_gpu_layers=args.n_gpu_layers,
-            n_ctx=args.n_ctx,
-            verbose=args.verbose,
-        )
-
-        result = translate(
-            llm=llm,
-            text=text,
-            src_lang=src_lang,
-            tgt_lang=tgt_lang,
-            max_tokens=args.max_tokens,
-        )
     except KeyboardInterrupt:
         print("\n中断しました。", file=sys.stderr)
         sys.exit(130)

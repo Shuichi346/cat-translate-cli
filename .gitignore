@@ -32,3 +32,10 @@ Thumbs.db
 
 # ログ
 *.log
+
+# Gradio
+flagged/
+
+# リンター・型チェックのキャッシュ
+.ruff_cache/
+.mypy_cache/
