@@ -1,0 +1,18 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "cat-translate-cli"
+version = "0.1.0"
+description = "CAT-Translate-7b GGUF モデルを使った日英・英日翻訳CLIツール"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+dependencies = [
+    "llama-cpp-python>=0.3.2",
+    "huggingface-hub>=0.27.0",
+]
+
+[project.scripts]
+cat-translate = "cat_translate_cli.cli:main"
