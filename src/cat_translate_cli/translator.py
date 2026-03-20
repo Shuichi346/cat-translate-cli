@@ -197,8 +197,7 @@ def translate(
         tgt_lang = "English" if src_lang == "Japanese" else "Japanese"
 
     prompt = (
-        f"Translate the following {src_lang} text into {tgt_lang}. "
-        "Return only the translated text.\n\n"
+        f"Translate the following {src_lang} text into {tgt_lang}.\n\n"
         f"{text}"
     )
 
