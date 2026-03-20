@@ -26,11 +26,11 @@ def build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "使用例:\n"
-            "  cat-translate \"これは猫です。\"\n"
-            "  cat-translate \"Hello, world!\" --to ja\n"
+            "  cat-translate 'これは猫です。'\n"
+            "  cat-translate 'Hello, world!' --to ja\n"
             "  cat-translate --file input.txt --from en --to ja\n"
-            "  echo \"こんにちは\" | cat-translate\n"
-            "  cat-translate \"猫\" --verbose\n"
+            "  echo 'こんにちは' | cat-translate\n"
+            "  cat-translate '猫' --verbose\n"
         ),
     )
 
@@ -138,7 +138,7 @@ def get_input_text(args: argparse.Namespace) -> str:
 
     raise ValueError(
         "翻訳するテキストを指定してください。"
-        " 使い方: cat-translate \"テキスト\" または "
+        " 使い方: cat-translate 'テキスト' または "
         "cat-translate --file ファイル.txt"
     )
 

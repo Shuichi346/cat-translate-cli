@@ -19,10 +19,10 @@ cat-translate = "cat_translate_cli.cli:main"
 
 [dependency-groups]
 dev = [
-    "deptry>=0.25.1",
-    "mypy>=1.19.1",
-    "ruff>=0.15.7",
-    "vulture>=2.15",
+    "ruff>=0.9.0",
+    "vulture>=2.14",
+    "deptry>=0.22.0",
+    "mypy>=1.14.0",
 ]
 
 [tool.deptry]
