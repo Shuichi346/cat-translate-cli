@@ -24,11 +24,12 @@ Apple Silicon (Metal) に対応しており、Mac でローカル実行できま
 
 ## インストール
 
+### 基本インストール（注意：これはCPU限定）
 ```bash
 pip install cat-translate-cli
 ```
 
-もしくは、
+### Apple Silicon (Metal GPU) で使う場合（推奨）
 
 ```bash
 # リポジトリをクローン

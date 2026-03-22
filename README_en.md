@@ -24,14 +24,16 @@ Using **Server Mode**, you can keep the model resident for fast translation from
 
 ## Installation
 
+### Basic Installation (Note: This is CPU-only)
+
 ```bash
 pip install cat-translate-cli
 ```
 
-or
+### Apple Silicon (Metal GPU) (recommended)
 
 ```bash
-# Clone the repository
+# リポジトリをクローン
 git clone https://github.com/yourname/cat-translate-cli.git
 cd cat-translate-cli
 
