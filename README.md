@@ -25,6 +25,12 @@ Apple Silicon (Metal) に対応しており、Mac でローカル実行できま
 ## インストール
 
 ```bash
+pip install cat-translate-cli
+```
+
+もしくは、
+
+```bash
 # リポジトリをクローン
 git clone https://github.com/yourname/cat-translate-cli.git
 cd cat-translate-cli

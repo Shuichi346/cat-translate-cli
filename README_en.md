@@ -25,6 +25,12 @@ Using **Server Mode**, you can keep the model resident for fast translation from
 ## Installation
 
 ```bash
+pip install cat-translate-cli
+```
+
+or
+
+```bash
 # Clone the repository
 git clone https://github.com/yourname/cat-translate-cli.git
 cd cat-translate-cli
