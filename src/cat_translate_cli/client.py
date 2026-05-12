@@ -6,6 +6,9 @@ import httpx
 
 
 DEFAULT_SERVER_URL = "http://127.0.0.1:7860"
+GRADIO_API_PREFIX = "/gradio_api"
+GRADIO_INFO_PATH = f"{GRADIO_API_PREFIX}/info"
+GRADIO_TRANSLATE_PATH = f"{GRADIO_API_PREFIX}/run/translate"
 HEALTH_TIMEOUT = 1.0
 TRANSLATE_TIMEOUT = 120.0
 
@@ -14,11 +17,10 @@ def is_server_running(server_url: str = DEFAULT_SERVER_URL) -> bool:
     """サーバーが起動中かどうか確認する"""
     try:
         response = httpx.get(
-            f"{server_url}/api/translate",
+            f"{server_url.rstrip('/')}{GRADIO_INFO_PATH}",
             timeout=HEALTH_TIMEOUT,
         )
-        # Gradio API エンドポイントが存在すれば 200 以外でも起動中と判定
-        return response.status_code != 404
+        return response.status_code == 200
     except (httpx.ConnectError, httpx.TimeoutException, OSError):
         return False
 
@@ -40,7 +42,7 @@ def translate_via_server(
 
     try:
         response = httpx.post(
-            f"{server_url}/api/translate",
+            f"{server_url.rstrip('/')}{GRADIO_TRANSLATE_PATH}",
             json=payload,
             timeout=TRANSLATE_TIMEOUT,
         )

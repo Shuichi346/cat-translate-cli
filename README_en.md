@@ -9,11 +9,11 @@
 
 # cat-translate-cli
 
-A CLI tool for Japanese-English and English-Japanese translation using the quantized GGUF model of [CAT-Translate-7b](https://huggingface.co/cyberagent/CAT-Translate-7b).
+A CLI tool for Japanese-to-English and English-to-Japanese translation using a quantized GGUF model of [CAT-Translate-7b](https://huggingface.co/cyberagent/CAT-Translate-7b).
 
-It supports Apple Silicon (Metal) and can run locally on Mac.
+Supports Apple Silicon (Metal) and can be run locally on a Mac.
 
-Using **Server Mode**, you can keep the model resident for fast translation from both browser and CLI.
+Using **server mode**, you can keep the model resident and translate quickly from both the browser and the CLI.
 
 ## Requirements
 
@@ -24,119 +24,152 @@ Using **Server Mode**, you can keep the model resident for fast translation from
 
 ## Installation
 
-### Basic Installation (Note: This is CPU-only)
-
+### Basic Installation (Note: this is CPU-only)
 ```bash
 pip install cat-translate-cli
 ```
 
-### Apple Silicon (Metal GPU) (recommended)
+### For use with Apple Silicon (Metal GPU) (Recommended)
 
 ```bash
-# リポジトリをクローン
+# Clone the repository
 git clone https://github.com/yourname/cat-translate-cli.git
 cd cat-translate-cli
 
 # Install with Metal (GPU) support
 CMAKE_ARGS='-DGGML_METAL=on' uv sync
 
-# Activate virtual environment
+# Activate the virtual environment
 source .venv/bin/activate
 ```
 
-> **Note**: `llama-cpp-python` requires C++ compilation.
-> To use GPU on Apple Silicon, add `CMAKE_ARGS='-DGGML_METAL=on'`.
+> **Note**: `llama-cpp-python` requires a C++ build.
+> To use the GPU on Apple Silicon, add `CMAKE_ARGS='-DGGML_METAL=on'`.
 
 ## Usage
 
 ### CLI (Command Line)
 
 ```bash
-# Japanese → English (automatic language detection)
+# Japanese → English (language is auto-detected)
 cat-translate '猫はとてもかわいいです。'
 
-# English → Japanese (automatic language detection)
+# English → Japanese (language is auto-detected)
 cat-translate 'Cats are very cute.'
 
-# Specify target language (ja / en abbreviations available)
+# Specify the target language (shorthand ja / en can be used)
 cat-translate 'Hello, world!' --to ja
 cat-translate 'こんにちは' --to en
 
-# Full names also work
+# Full name also works
 cat-translate 'Hello, world!' --to Japanese
 
-# Explicitly specify source language too
+# Explicitly specify the source language as well
 cat-translate 'Hello!' --from en --to ja
 
-# Translate from file
+# Translate from a file
 cat-translate --file input.txt
 
 # Pipe input
 echo 'こんにちは世界' | cat-translate
 
-# Redirect only translation results (no logs)
+# Redirect only the translation result (no log output)
 cat-translate '猫はかわいい' > output.txt
 ```
 
 ### Server Mode (Fast Translation)
 
-When the server is started, the model remains resident, significantly speeding up CLI translation.
-You can also translate from the browser using the Web UI.
+Starting a server keeps the model resident, which greatly speeds up CLI translation.
+You can also translate via Web UI from a browser.
 
 ```bash
-# Terminal 1: Start server (initial model loading takes time on first run)
+# Terminal 1: Start the server (the first time, model loading will take some time)
 cat-translate-server
 
-# Terminal 2: Translate with CLI (automatically uses server if running)
+# Terminal 2: Translate via CLI (automatically uses the server if it is running)
 cat-translate '猫はとてもかわいいです。'
 
-# Open Web UI in browser
+# Open the Web UI in the browser
 # → http://127.0.0.1:7860
 ```
 
-When the server is not running, it loads the model locally for translation as before.
+### Node.js Web UI Mode
+
+Using the existing Python translation server as a backend, you can translate from a lightweight Node.js / Express Web UI.
 
 ```bash
-# Always translate locally without using server
+# Install Node.js dependencies
+npm install
+
+# Copy .env.example and choose a model if needed
+cp .env.example .env
+
+# Start the Python translation server and Node.js Web UI
+npm run start:web-ui
+
+# Open the Node.js Web UI in the browser
+# → http://127.0.0.1:3000
+```
+
+The Start Web UI script starts the Python server at `http://127.0.0.1:7860` by default,
+then starts the Node.js Web UI at `http://127.0.0.1:3000`.
+You can change this via environment variables as needed.
+
+```bash
+CAT_TRANSLATE_MODEL=CAT-Translate-7b.i1-Q4_K_M.gguf npm run start:web-ui
+```
+
+If the server is not running, it will load the model locally and translate as usual.
+
+```bash
+# Always translate locally without using the server
 cat-translate '猫はかわいい' --no-server
 ```
 
-### Main CLI Options
+### Main Options (CLI)
 
 | Option | Description | Default |
 |---|---|---|
 | `--from LANG` | Source language (ja / en / Japanese / English) | Auto-detect |
 | `--to LANG` | Target language (ja / en / Japanese / English) | Auto-detect |
-| `--model` | GGUF filename | `CAT-Translate-7b.i1-Q4_K_M.gguf` |
-| `--model-path` | Local GGUF file path | None (download from HF) |
+| `--model` | GGUF file name | `CAT-Translate-7b.i1-Q4_K_M.gguf` |
+| `--model-path` | Local GGUF file path | None (downloaded from HF) |
 | `--repo-id` | Hugging Face repository ID | `mradermacher/CAT-Translate-7b-i1-GGUF` |
-| `--n-gpu-layers` | Number of layers to put on GPU | `-1` (all layers) |
+| `--n-gpu-layers` | Number of layers to offload to GPU | `-1` (all layers) |
 | `--n-ctx` | Context window size | `4096` |
-| `--max-tokens` | Maximum generation tokens | `2048` |
+| `--max-tokens` | Maximum number of tokens to generate | `2048` |
 | `--verbose` | Show detailed logs | Off |
 | `--server-url` | Translation server URL | `http://127.0.0.1:7860` |
-| `--no-server` | Translate locally without using server | Off |
+| `--no-server` | Translate locally without using the server | Off |
 
-### Main Server Options
+### Main Options (Server)
 
 | Option | Description | Default |
 |---|---|---|
 | `--host` | Server host | `127.0.0.1` |
 | `--port` | Server port | `7860` |
-| `--model` | GGUF filename | `CAT-Translate-7b.i1-Q4_K_M.gguf` |
+| `--model` | GGUF file name | `CAT-Translate-7b.i1-Q4_K_M.gguf` |
 | `--model-path` | Local GGUF file path | None |
-| `--n-gpu-layers` | Number of layers to put on GPU | `-1` |
+| `--n-gpu-layers` | Number of layers to offload to GPU | `-1` |
 | `--n-ctx` | Context window size | `4096` |
-| `--max-tokens` | Maximum generation tokens | `2048` |
+| `--max-tokens` | Maximum number of tokens to generate | `2048` |
 | `--verbose` | Show detailed logs | Off |
 
-### Using Different Quantized Models
+### Node.js Web UI Environment Variables
+
+| Environment Variable | Description | Default |
+|---|---|---|
+| `HOST` | Node.js Web UI host | `127.0.0.1` |
+| `PORT` | Node.js Web UI port | `3000` |
+| `CAT_TRANSLATE_BACKEND_URL` | Python translation server URL | `http://127.0.0.1:7860` |
+
+### Using a Different Quantized Model
 
 ```bash
-# Use lightweight model (Q2_K)
-cat-translate 'こんにちは' --model CAT-Translate-7b.i1-Q2_K.gguf
+# Using a lightweight model (Q2_K)
+cat-translate 'こんにちは' --model CAT-Translate-7b.i1-Q4_K_M.gguf
 
-# Use high-quality model (Q6_K)
+# Using a high-quality model (Q6_K)
 cat-translate 'こんにちは' --model CAT-Translate-7b.i1-Q6_K.gguf
 ```
 
@@ -148,7 +181,7 @@ cat-translate 'こんにちは' --n-gpu-layers 0
 
 ### Troubleshooting
 
-If something isn't working properly, add `--verbose` to check detailed logs.
+If something seems wrong, add `--verbose` to check the detailed logs.
 
 ```bash
 cat-translate '猫はかわいい' --verbose
@@ -156,10 +189,10 @@ cat-translate '猫はかわいい' --verbose
 
 ## About the Model
 
-- **Original Model**: [cyberagent/CAT-Translate-7b](https://huggingface.co/cyberagent/CAT-Translate-7b) (MIT License)
-- **GGUF Quantization**: [mradermacher/CAT-Translate-7b-i1-GGUF](https://huggingface.co/mradermacher/CAT-Translate-7b-i1-GGUF)
-- **Default Quantization**: `i1-Q4_K_M` (approximately 4.6 GB, good balance of speed and quality)
-- The model is automatically downloaded on first run (saved to `~/.cache/huggingface/`)
+- **Base model**: [cyberagent/CAT-Translate-7b](https://huggingface.co/cyberagent/CAT-Translate-7b) (MIT License)
+- **GGUF quantization**: [mradermacher/CAT-Translate-7b-i1-GGUF](https://huggingface.co/mradermacher/CAT-Translate-7b-i1-GGUF)
+- **Default quantization**: `i1-Q4_K_M` (approx. 4.6 GB, good balance of speed and quality)
+- The model is automatically downloaded on the first run (saved to `~/.cache/huggingface/`)
 
 ## License
 

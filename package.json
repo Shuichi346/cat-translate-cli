@@ -1,0 +1,16 @@
+{
+  "name": "cat-translate-cli-web",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "web": "node web/server.js",
+    "start:web-ui": "scripts/start-web-ui.sh"
+  },
+  "dependencies": {
+    "express": "^5.1.0"
+  }
+}
