@@ -20,6 +20,9 @@ uv.lock
 node_modules/
 npm-debug.log*
 
+# Local environment
+.env
+
 # IDE
 .vscode/
 .idea/

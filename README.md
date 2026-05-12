@@ -98,24 +98,25 @@ cat-translate '猫はとてもかわいいです。'
 既存の Python 翻訳サーバーをバックエンドとして使い、Node.js / Express の軽量な Web UI から翻訳できます。
 
 ```bash
-# ターミナル1: Python 翻訳サーバーを起動
-cat-translate-server
-
-# ターミナル2: Node.js 依存関係をインストール
+# Node.js 依存関係をインストール
 npm install
 
-# ターミナル2: Node.js Web UI を起動
-npm run web
+# .env.example をコピーして、必要に応じてモデルを選択
+cp .env.example .env
+
+# Python 翻訳サーバーと Node.js Web UI を起動
+npm run start:web-ui
 
 # ブラウザで Node.js Web UI を開く
 # → http://127.0.0.1:3000
 ```
 
-Node.js Web UI はデフォルトで `http://127.0.0.1:7860` の Python サーバーへ接続します。
+Start Web UI スクリプトはデフォルトで `http://127.0.0.1:7860` の Python サーバーを起動し、
+`http://127.0.0.1:3000` で Node.js Web UI を起動します。
 必要に応じて環境変数で変更できます。
 
 ```bash
-HOST=127.0.0.1 PORT=3000 CAT_TRANSLATE_BACKEND_URL=http://127.0.0.1:7860 npm run web
+CAT_TRANSLATE_MODEL=CAT-Translate-7b.i1-Q4_K_M.gguf npm run start:web-ui
 ```
 
 サーバーが起動していない場合は、従来通りローカルでモデルを読み込んで翻訳します。

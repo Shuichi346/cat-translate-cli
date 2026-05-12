@@ -55,10 +55,18 @@
               <textarea id="input-text" name="text" rows="12" placeholder="Enter Japanese or English text..."></textarea>
             </label>
 
-            <label class="panel">
-              <span class="panel-label">Translation</span>
+            <div class="panel">
+              <span class="panel-heading">
+                <label class="panel-label" for="output-text">Translation</label>
+                <button id="copy-button" class="copy-button" type="button" disabled aria-label="Copy translation" title="Copy translation">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M8 7V5a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2" />
+                    <path d="M5 7h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2Z" />
+                  </svg>
+                </button>
+              </span>
               <textarea id="output-text" rows="12" readonly placeholder="Translation appears here."></textarea>
-            </label>
+            </div>
           </div>
 
           <div class="actions">

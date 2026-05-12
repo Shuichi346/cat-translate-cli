@@ -10,6 +10,7 @@ const PORT = Number.parseInt(process.env.PORT || "3000", 10);
 const BACKEND_URL = (
   process.env.CAT_TRANSLATE_BACKEND_URL || "http://127.0.0.1:7860"
 ).replace(/\/+$/, "");
+const GRADIO_TRANSLATE_PATH = "/gradio_api/run/translate";
 const REQUEST_TIMEOUT_MS = 120_000;
 const LANGUAGE_VALUES = new Set(["auto", "Japanese", "English"]);
 
@@ -60,20 +61,23 @@ app.post("/api/translate", async (request, response) => {
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
   try {
-    const backendResponse = await fetch(`${BACKEND_URL}/api/translate`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
+    const backendResponse = await fetch(
+      `${BACKEND_URL}${GRADIO_TRANSLATE_PATH}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          data: [
+            parsed.text,
+            toBackendLanguage(parsed.srcLang),
+            toBackendLanguage(parsed.tgtLang),
+          ],
+        }),
+        signal: controller.signal,
       },
-      body: JSON.stringify({
-        data: [
-          parsed.text,
-          toBackendLanguage(parsed.srcLang),
-          toBackendLanguage(parsed.tgtLang),
-        ],
-      }),
-      signal: controller.signal,
-    });
+    );
 
     if (!backendResponse.ok) {
       response.status(502).json({
