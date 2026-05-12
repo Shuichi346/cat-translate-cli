@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>CAT-Translate Web UI</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="app-header" aria-labelledby="page-title">
+        <div class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 48 48" role="img">
+            <path d="M11 20 7 9l11 6a20 20 0 0 1 12 0l11-6-4 11a18 18 0 1 1-26 0Z" />
+            <path d="M17 28h.01M31 28h.01M20 35c2.4 1.8 5.6 1.8 8 0" />
+          </svg>
+        </div>
+        <div>
+          <h1 id="page-title">CAT-Translate</h1>
+          <p>Local Japanese-English translation through the resident Python model server.</p>
+        </div>
+      </header>
+
+      <section class="translator" aria-label="Translator">
+        <form id="translate-form" class="translator-form">
+          <div class="toolbar" aria-label="Language controls">
+            <label class="field">
+              <span>Source</span>
+              <select id="src-lang" name="srcLang">
+                <option value="auto">Auto detect</option>
+                <option value="Japanese">Japanese</option>
+                <option value="English">English</option>
+              </select>
+            </label>
+
+            <button id="swap-button" class="icon-button" type="button" aria-label="Swap languages and text">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M7 7h12m0 0-4-4m4 4-4 4M17 17H5m0 0 4 4m-4-4 4-4" />
+              </svg>
+            </button>
+
+            <label class="field">
+              <span>Target</span>
+              <select id="tgt-lang" name="tgtLang">
+                <option value="auto">Auto select</option>
+                <option value="Japanese">Japanese</option>
+                <option value="English">English</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="workspace">
+            <label class="panel">
+              <span class="panel-label">Original</span>
+              <textarea id="input-text" name="text" rows="12" placeholder="Enter Japanese or English text..."></textarea>
+            </label>
+
+            <label class="panel">
+              <span class="panel-label">Translation</span>
+              <textarea id="output-text" rows="12" readonly placeholder="Translation appears here."></textarea>
+            </label>
+          </div>
+
+          <div class="actions">
+            <p id="status-message" class="status-message" role="status" aria-live="polite"></p>
+            <button id="translate-button" class="primary-button" type="submit">
+              <span class="button-label">Translate</span>
+              <span class="button-spinner" aria-hidden="true"></span>
+            </button>
+          </div>
+        </form>
+      </section>
+    </main>
+
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>

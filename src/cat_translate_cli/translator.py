@@ -12,7 +12,7 @@ from llama_cpp import Llama
 
 
 DEFAULT_REPO_ID = "mradermacher/CAT-Translate-7b-i1-GGUF"
-DEFAULT_MODEL_FILENAME = "CAT-Translate-7b.i1-Q4_K_M.gguf"
+DEFAULT_MODEL_FILENAME = "CAT-Translate-7b.i1-Q6_K.gguf"
 DEFAULT_N_GPU_LAYERS = -1
 DEFAULT_N_CTX = 4096
 DEFAULT_MAX_TOKENS = 2048

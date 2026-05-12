@@ -93,6 +93,31 @@ cat-translate '猫はとてもかわいいです。'
 # → http://127.0.0.1:7860
 ```
 
+### Node.js Web UI モード
+
+既存の Python 翻訳サーバーをバックエンドとして使い、Node.js / Express の軽量な Web UI から翻訳できます。
+
+```bash
+# ターミナル1: Python 翻訳サーバーを起動
+cat-translate-server
+
+# ターミナル2: Node.js 依存関係をインストール
+npm install
+
+# ターミナル2: Node.js Web UI を起動
+npm run web
+
+# ブラウザで Node.js Web UI を開く
+# → http://127.0.0.1:3000
+```
+
+Node.js Web UI はデフォルトで `http://127.0.0.1:7860` の Python サーバーへ接続します。
+必要に応じて環境変数で変更できます。
+
+```bash
+HOST=127.0.0.1 PORT=3000 CAT_TRANSLATE_BACKEND_URL=http://127.0.0.1:7860 npm run web
+```
+
 サーバーが起動していない場合は、従来通りローカルでモデルを読み込んで翻訳します。
 
 ```bash
@@ -129,11 +154,19 @@ cat-translate '猫はかわいい' --no-server
 | `--max-tokens` | 最大生成トークン数 | `2048` |
 | `--verbose` | 詳細ログを表示 | オフ |
 
+### Node.js Web UI の環境変数
+
+| 環境変数 | 説明 | デフォルト |
+|---|---|---|
+| `HOST` | Node.js Web UI のホスト | `127.0.0.1` |
+| `PORT` | Node.js Web UI のポート | `3000` |
+| `CAT_TRANSLATE_BACKEND_URL` | Python 翻訳サーバーの URL | `http://127.0.0.1:7860` |
+
 ### 別の量子化モデルを使う
 
 ```bash
 # 軽量モデル（Q2_K）を使う場合
-cat-translate 'こんにちは' --model CAT-Translate-7b.i1-Q2_K.gguf
+cat-translate 'こんにちは' --model CAT-Translate-7b.i1-Q4_K_M.gguf
 
 # 高品質モデル（Q6_K）を使う場合
 cat-translate 'こんにちは' --model CAT-Translate-7b.i1-Q6_K.gguf
