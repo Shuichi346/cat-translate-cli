@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "cat-translate-cli"
-version = "0.2.0"
+version = "0.3.0"
 description = "CAT-Translate-7b GGUF モデルを使った日英・英日翻訳CLIツール（サーバーモード対応）"
 readme = "README.md"
 license = "MIT"
