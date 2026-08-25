@@ -7,7 +7,7 @@ import sys
 
 from cat_translate_cli.client import (
     DEFAULT_SERVER_URL,
-    is_server_running,
+    ServerUnavailableError,
     translate_via_server,
 )
 from cat_translate_cli.translator import (
@@ -38,7 +38,7 @@ def build_parser() -> argparse.ArgumentParser:
             "  cat-translate \"猫\" --verbose\n"
             "\n"
             "サーバーモード:\n"
-            "  サーバーが起動中なら自動的にサーバー経由で翻訳します（高速）\n"
+            "  サーバーへ接続できる場合は自動的にサーバー経由で翻訳します（高速）\n"
             "  サーバー起動: cat-translate-server\n"
             "  サーバーを使わない: cat-translate \"テキスト\" --no-server\n"
         ),
@@ -50,7 +50,6 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="翻訳するテキスト（省略時は --file または標準入力から読み取り）",
     )
-
     parser.add_argument(
         "-f",
         "--file",
@@ -58,7 +57,6 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="翻訳するテキストファイルのパス",
     )
-
     parser.add_argument(
         "--from",
         dest="src_lang",
@@ -75,7 +73,6 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="LANG",
         help="翻訳先の言語（ja / en / Japanese / English、省略時は自動判定）",
     )
-
     parser.add_argument(
         "--repo-id",
         type=str,
@@ -94,7 +91,6 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="ローカルの GGUF モデルファイルパス（指定時はダウンロードをスキップ）",
     )
-
     parser.add_argument(
         "--n-gpu-layers",
         type=int,
@@ -121,7 +117,6 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="モデル読み込みや llama.cpp の詳細ログを表示する",
     )
-
     parser.add_argument(
         "--server-url",
         type=str,
@@ -133,7 +128,6 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="サーバーを使わず、常にローカルでモデルを読み込んで翻訳する",
     )
-
     return parser
 
 
@@ -166,7 +160,7 @@ def get_input_text(args: argparse.Namespace) -> str:
 
 
 def translate_local(args: argparse.Namespace, text: str) -> str:
-    """ローカルでモデルを読み込んで翻訳する（従来の動作）"""
+    """ローカルでモデルを読み込んで翻訳する"""
     src_lang = normalize_language(args.src_lang) if args.src_lang else None
     tgt_lang = normalize_language(args.tgt_lang) if args.tgt_lang else None
 
@@ -208,6 +202,18 @@ def translate_remote(args: argparse.Namespace, text: str) -> str:
     )
 
 
+def _requires_local_model(args: argparse.Namespace) -> bool:
+    """サーバーへ渡せないモデル設定が指定されているか判定する。"""
+    return (
+        args.model_path is not None
+        or args.repo_id != DEFAULT_REPO_ID
+        or args.model != DEFAULT_MODEL_FILENAME
+        or args.n_gpu_layers != DEFAULT_N_GPU_LAYERS
+        or args.n_ctx != DEFAULT_N_CTX
+        or args.max_tokens != DEFAULT_MAX_TOKENS
+    )
+
+
 def main() -> None:
     """メインエントリーポイント"""
     parser = build_parser()
@@ -218,23 +224,26 @@ def main() -> None:
         if not text:
             raise ValueError("空のテキストです。")
 
-        # サーバーが起動中ならサーバー経由で翻訳（高速）
-        use_server = (
-            not args.no_server
-            and is_server_running(args.server_url)
-        )
-
-        if use_server:
-            if args.verbose:
-                print(
-                    f"サーバー経由で翻訳します ({args.server_url})",
-                    file=sys.stderr,
-                )
-            result = translate_remote(args, text)
+        use_remote = not args.no_server and not _requires_local_model(args)
+        if use_remote:
+            try:
+                if args.verbose:
+                    print(
+                        f"サーバー経由で翻訳します ({args.server_url})",
+                        file=sys.stderr,
+                    )
+                result = translate_remote(args, text)
+            except ServerUnavailableError:
+                if args.verbose:
+                    print(
+                        "サーバーが見つかりません。ローカルで翻訳します。",
+                        file=sys.stderr,
+                    )
+                result = translate_local(args, text)
         else:
-            if args.verbose and not args.no_server:
+            if args.verbose and not args.no_server and _requires_local_model(args):
                 print(
-                    "サーバーが見つかりません。ローカルで翻訳します。",
+                    "モデル設定オプションが指定されたためローカルで翻訳します。",
                     file=sys.stderr,
                 )
             result = translate_local(args, text)

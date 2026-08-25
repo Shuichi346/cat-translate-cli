@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ctypes
 import sys
+import unicodedata
 from typing import Any
 
 import llama_cpp
@@ -12,10 +13,11 @@ from llama_cpp import Llama
 
 
 DEFAULT_REPO_ID = "mradermacher/CAT-Translate-7b-i1-GGUF"
-DEFAULT_MODEL_FILENAME = "CAT-Translate-7b.i1-Q6_K.gguf"
+DEFAULT_MODEL_FILENAME = "CAT-Translate-7b.i1-Q4_K_M.gguf"
 DEFAULT_N_GPU_LAYERS = -1
 DEFAULT_N_CTX = 4096
 DEFAULT_MAX_TOKENS = 2048
+_CONTEXT_SAFETY_MARGIN = 32
 
 LANGUAGE_ALIASES = {
     "ja": "Japanese",
@@ -61,26 +63,17 @@ def normalize_language(value: str) -> str:
     normalized = LANGUAGE_ALIASES.get(value.lower())
     if normalized is None:
         valid = ", ".join(VALID_LANGUAGE_INPUTS)
-        raise ValueError(
-            f"不明な言語 '{value}' です（指定可能: {valid}）"
-        )
+        raise ValueError(f"不明な言語 '{value}' です（指定可能: {valid}）")
     return normalized
 
 
-def download_model(
-    repo_id: str,
-    filename: str,
-    verbose: bool = False,
-) -> str:
+def download_model(repo_id: str, filename: str, verbose: bool = False) -> str:
     """Hugging Face Hub からモデルをダウンロードし、ローカルパスを返す"""
     if verbose:
         print(f"モデルを準備中: {repo_id}/{filename}", file=sys.stderr)
 
     try:
-        local_path = hf_hub_download(
-            repo_id=repo_id,
-            filename=filename,
-        )
+        local_path = hf_hub_download(repo_id=repo_id, filename=filename)
     except Exception as error:
         raise RuntimeError(
             f"モデルの準備に失敗しました: {repo_id}/{filename}: {error}"
@@ -88,7 +81,6 @@ def download_model(
 
     if verbose:
         print(f"モデル準備完了: {local_path}", file=sys.stderr)
-
     return local_path
 
 
@@ -101,7 +93,6 @@ def load_model(
     """GGUF モデルを読み込んで Llama インスタンスを返す"""
     if not verbose:
         suppress_llama_log()
-
     if verbose:
         print("モデルを読み込み中...", file=sys.stderr)
 
@@ -119,39 +110,28 @@ def load_model(
 
     if verbose:
         print("モデル読み込み完了", file=sys.stderr)
-
     return llm
 
 
+def _is_japanese_letter(char: str) -> bool:
+    code_point = ord(char)
+    return (
+        0x3040 <= code_point <= 0x309F
+        or 0x30A0 <= code_point <= 0x30FF
+        or 0x3400 <= code_point <= 0x4DBF
+        or 0x4E00 <= code_point <= 0x9FFF
+    )
+
+
 def detect_language(text: str) -> str:
-    """テキストの言語を簡易判定する（日本語 or 英語）"""
-    japanese_count = 0
-    total_count = 0
-
-    for char in text:
-        if char.isspace() or char in ".,!?;:\"'()-":
-            continue
-
-        total_count += 1
-        code_point = ord(char)
-
-        if (
-            0x3040 <= code_point <= 0x309F
-            or 0x30A0 <= code_point <= 0x30FF
-            or 0x4E00 <= code_point <= 0x9FFF
-            or 0x3400 <= code_point <= 0x4DBF
-            or 0xFF00 <= code_point <= 0xFFEF
-            or 0x3000 <= code_point <= 0x303F
-        ):
-            japanese_count += 1
-
-    if total_count == 0:
+    """テキストの言語を簡易判定する（日本語 or 英語）。"""
+    normalized = unicodedata.normalize("NFKC", text)
+    letters = [char for char in normalized if char.isalpha()]
+    if not letters:
         return "English"
 
-    if japanese_count / total_count >= 0.3:
-        return "Japanese"
-
-    return "English"
+    japanese_count = sum(_is_japanese_letter(char) for char in letters)
+    return "Japanese" if japanese_count / len(letters) >= 0.3 else "English"
 
 
 def extract_translation_content(response: Any) -> str:
@@ -178,8 +158,28 @@ def extract_translation_content(response: Any) -> str:
     result = content.strip()
     if not result:
         raise RuntimeError("翻訳結果が空です。")
-
     return result
+
+
+def _validate_context_budget(llm: Llama, prompt: str, max_tokens: int) -> None:
+    if max_tokens <= 0:
+        raise ValueError("max_tokens は 1 以上を指定してください。")
+
+    try:
+        n_ctx = int(llm.n_ctx())
+        prompt_tokens = len(llm.tokenize(prompt.encode("utf-8"), add_bos=True))
+    except (AttributeError, TypeError, ValueError):
+        return
+
+    required = prompt_tokens + max_tokens + _CONTEXT_SAFETY_MARGIN
+    if required > n_ctx:
+        available = max(0, n_ctx - prompt_tokens - _CONTEXT_SAFETY_MARGIN)
+        raise ValueError(
+            "入力がコンテキスト上限を超えます。"
+            f" n_ctx={n_ctx}, 入力約{prompt_tokens}トークン, "
+            f"生成に利用可能な目安={available}トークン。"
+            " --n-ctx を増やすか、入力を分割してください。"
+        )
 
 
 def translate(
@@ -192,22 +192,13 @@ def translate(
     """テキストを翻訳する"""
     if src_lang is None:
         src_lang = detect_language(text)
-
     if tgt_lang is None:
         tgt_lang = "English" if src_lang == "Japanese" else "Japanese"
 
-    prompt = (
-        f"Translate the following {src_lang} text into {tgt_lang}.\n\n"
-        f"{text}"
-    )
+    prompt = f"Translate the following {src_lang} text into {tgt_lang}.\n\n{text}"
+    _validate_context_budget(llm, prompt, max_tokens)
 
-    messages: Any = [
-        {
-            "role": "user",
-            "content": prompt,
-        }
-    ]
-
+    messages: Any = [{"role": "user", "content": prompt}]
     try:
         response = llm.create_chat_completion(
             messages=messages,

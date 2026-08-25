@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+import threading
 
 import gradio as gr
 from llama_cpp import Llama
@@ -23,6 +24,7 @@ from cat_translate_cli.translator import (
 
 # 言語選択肢（UIドロップダウン用）
 LANGUAGE_CHOICES = ["自動判定", "Japanese", "English"]
+_TRANSLATION_CONCURRENCY_ID = "cat-translate-model"
 
 
 def _resolve_language(value: str) -> str | None:
@@ -38,69 +40,21 @@ def build_parser() -> argparse.ArgumentParser:
         prog="cat-translate-server",
         description="CAT-Translate 翻訳サーバー（Gradio Web UI）",
     )
-
-    parser.add_argument(
-        "--host",
-        type=str,
-        default="127.0.0.1",
-        help="サーバーのホスト（デフォルト: 127.0.0.1）",
-    )
-    parser.add_argument(
-        "--port",
-        type=int,
-        default=7860,
-        help="サーバーのポート（デフォルト: 7860）",
-    )
-    parser.add_argument(
-        "--repo-id",
-        type=str,
-        default=DEFAULT_REPO_ID,
-        help=f"Hugging Face リポジトリ ID（デフォルト: {DEFAULT_REPO_ID}）",
-    )
-    parser.add_argument(
-        "--model",
-        type=str,
-        default=DEFAULT_MODEL_FILENAME,
-        help=f"GGUF モデルファイル名（デフォルト: {DEFAULT_MODEL_FILENAME}）",
-    )
-    parser.add_argument(
-        "--model-path",
-        type=str,
-        default=None,
-        help="ローカルの GGUF モデルファイルパス",
-    )
-    parser.add_argument(
-        "--n-gpu-layers",
-        type=int,
-        default=DEFAULT_N_GPU_LAYERS,
-        help=f"GPU に載せるレイヤー数（デフォルト: {DEFAULT_N_GPU_LAYERS}）",
-    )
-    parser.add_argument(
-        "--n-ctx",
-        type=int,
-        default=DEFAULT_N_CTX,
-        help=f"コンテキストウィンドウサイズ（デフォルト: {DEFAULT_N_CTX}）",
-    )
-    parser.add_argument(
-        "--max-tokens",
-        type=int,
-        default=DEFAULT_MAX_TOKENS,
-        help=f"最大生成トークン数（デフォルト: {DEFAULT_MAX_TOKENS}）",
-    )
-    parser.add_argument(
-        "--verbose",
-        action="store_true",
-        help="詳細ログを表示する",
-    )
-
+    parser.add_argument("--host", type=str, default="127.0.0.1", help="サーバーのホスト（デフォルト: 127.0.0.1）")
+    parser.add_argument("--port", type=int, default=7860, help="サーバーのポート（デフォルト: 7860）")
+    parser.add_argument("--repo-id", type=str, default=DEFAULT_REPO_ID, help=f"Hugging Face リポジトリ ID（デフォルト: {DEFAULT_REPO_ID}）")
+    parser.add_argument("--model", type=str, default=DEFAULT_MODEL_FILENAME, help=f"GGUF モデルファイル名（デフォルト: {DEFAULT_MODEL_FILENAME}）")
+    parser.add_argument("--model-path", type=str, default=None, help="ローカルの GGUF モデルファイルパス")
+    parser.add_argument("--n-gpu-layers", type=int, default=DEFAULT_N_GPU_LAYERS, help=f"GPU に載せるレイヤー数（デフォルト: {DEFAULT_N_GPU_LAYERS}）")
+    parser.add_argument("--n-ctx", type=int, default=DEFAULT_N_CTX, help=f"コンテキストウィンドウサイズ（デフォルト: {DEFAULT_N_CTX}）")
+    parser.add_argument("--max-tokens", type=int, default=DEFAULT_MAX_TOKENS, help=f"最大生成トークン数（デフォルト: {DEFAULT_MAX_TOKENS}）")
+    parser.add_argument("--verbose", action="store_true", help="詳細ログを表示する")
     return parser
 
 
-def create_app(
-    llm: Llama,
-    max_tokens: int = DEFAULT_MAX_TOKENS,
-) -> gr.Blocks:
+def create_app(llm: Llama, max_tokens: int = DEFAULT_MAX_TOKENS) -> gr.Blocks:
     """Gradio アプリケーションを構築する"""
+    model_lock = threading.Lock()
 
     def do_translate(
         text: str,
@@ -114,18 +68,15 @@ def create_app(
         src_lang = _resolve_language(src_lang_choice)
         tgt_lang = _resolve_language(tgt_lang_choice)
 
-        try:
-            result = translate(
+        # llama.cpp の同一コンテキストを複数リクエストから同時利用しない。
+        with model_lock:
+            return translate(
                 llm=llm,
                 text=text.strip(),
                 src_lang=src_lang,
                 tgt_lang=tgt_lang,
                 max_tokens=max_tokens,
             )
-        except RuntimeError as error:
-            return f"エラー: {error}"
-
-        return result
 
     def swap_languages(
         src_lang_choice: str,
@@ -190,29 +141,26 @@ def create_app(
 
         translate_btn = gr.Button("翻訳", variant="primary")
 
-        # 翻訳ボタン
         translate_btn.click(
             fn=do_translate,
             inputs=[input_text, src_lang, tgt_lang],
             outputs=output_text,
             api_name="translate",
+            concurrency_limit=1,
+            concurrency_id=_TRANSLATION_CONCURRENCY_ID,
         )
-
-        # Enter キーでも翻訳を実行
         input_text.submit(
             fn=do_translate,
             inputs=[input_text, src_lang, tgt_lang],
             outputs=output_text,
+            concurrency_limit=1,
+            concurrency_id=_TRANSLATION_CONCURRENCY_ID,
         )
-
-        # 入れ替えボタン
         swap_btn.click(
             fn=swap_languages,
             inputs=[src_lang, tgt_lang, input_text, output_text],
             outputs=[src_lang, tgt_lang, input_text, output_text],
         )
-
-        # 入力テキスト変更時に言語を自動検出して表示
         input_text.change(
             fn=auto_detect_label,
             inputs=[input_text, src_lang],

@@ -13,6 +13,10 @@ HEALTH_TIMEOUT = 1.0
 TRANSLATE_TIMEOUT = 120.0
 
 
+class ServerUnavailableError(RuntimeError):
+    """翻訳サーバーへ接続できない場合のエラー。"""
+
+
 def is_server_running(server_url: str = DEFAULT_SERVER_URL) -> bool:
     """サーバーが起動中かどうか確認する"""
     try:
@@ -21,7 +25,7 @@ def is_server_running(server_url: str = DEFAULT_SERVER_URL) -> bool:
             timeout=HEALTH_TIMEOUT,
         )
         return response.status_code == 200
-    except (httpx.ConnectError, httpx.TimeoutException, OSError):
+    except (httpx.RequestError, OSError):
         return False
 
 
@@ -48,25 +52,30 @@ def translate_via_server(
         )
         response.raise_for_status()
     except httpx.ConnectError as error:
-        raise RuntimeError(
+        raise ServerUnavailableError(
             f"サーバーに接続できません ({server_url}): {error}"
-        ) from error
-    except httpx.HTTPStatusError as error:
-        raise RuntimeError(
-            f"サーバーからエラーが返されました: {error}"
         ) from error
     except httpx.TimeoutException as error:
         raise RuntimeError(
             f"サーバーからの応答がタイムアウトしました: {error}"
         ) from error
+    except httpx.HTTPStatusError as error:
+        raise RuntimeError(
+            f"サーバーからエラーが返されました: {error}"
+        ) from error
+    except httpx.RequestError as error:
+        raise RuntimeError(f"サーバー通信に失敗しました: {error}") from error
 
-    result = response.json()
-    data = result.get("data")
+    try:
+        result = response.json()
+    except ValueError as error:
+        raise RuntimeError("サーバー応答が JSON ではありません。") from error
+
+    data = result.get("data") if isinstance(result, dict) else None
     if not isinstance(data, list) or not data:
         raise RuntimeError("サーバー応答の形式が不正です。")
 
     translated = data[0]
     if not isinstance(translated, str) or not translated.strip():
         raise RuntimeError("サーバーから翻訳結果を取得できませんでした。")
-
     return translated.strip()
